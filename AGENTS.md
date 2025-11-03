@@ -1,19 +1,136 @@
-# Repository Guidelines
+# AGENTS.md — Eqeqo Auth API
 
-## Project Structure & Module Organization
-`src/main.rs` boots the service and delegates routing setup to `src/lib.rs`. HTTP handlers live in `src/handlers/` grouped by domain (users, services, roles, permissions, relations), while shared database access sits in `src/database.rs` using SQLx pools. Keep bootstrap SQL under `db/`, seed fixtures in `assets/`, generated SQLx metadata in `sqlx-data.json`, and integration tests in `tests/api_tests.rs`.
+**Objective:**
+Central service for authentication, authorization, and token management across Eqeqo APIs.
 
-## Build, Test, and Development Commands
-Use `cargo check` for a fast type pass before opening a PR. Run `cargo fmt` to apply the repository’s `rustfmt.toml`, and enforce lint cleanliness with `cargo clippy -- -D warnings`. Start the API locally via `cargo run` once `DATABASE_URL` is exported. Execute the full suite with `cargo test`; regenerate SQLx metadata after schema changes using `cargo sqlx prepare -- --lib` and apply `db/run_all.sql` first.
+---
 
-## Coding Style & Naming Conventions
-Rust code follows two-space indentation, no tabs, and braces on the next line. Group routes by resource inside `src/lib.rs` and return compact structs deriving `serde::Serialize` from handlers. Prefer descriptive snake_case for modules and functions, and keep response DTOs in their domain folder to reduce coupling.
+## 🔧 Tasks for agents
+1. **Add table**
+   - Add `auth.tokens_cache` with `token`, `payload`, `modified_at` (see README).
+2. **Implement endpoints**
+   - `/auth/login`: create token, insert record.
+   - `/auth/logout`: delete token from table.
+   - `/auth/profile`: validate token, renew conditionally.
+   - `/check-token`: same validation logic for external APIs.
+3. **Add token renewal logic**
+   - Atomic SQL: `UPDATE ... RETURNING` + fallback `SELECT`.
+   - Respect `TOKEN_TTL_SECONDS` and `TOKEN_RENEW_THRESHOLD_SECONDS`.
+4. **Require header `token:` in all protected routes.**
+5. **On user delete**, remove related tokens.
+6. **Add minimal logging**
+   - Record token, endpoint, timestamp, IP.
+7. **Add cleanup job**
+   - Periodically remove expired tokens.
+
+---
+
+## 🧭 Flow summary
+1. User logs in → Auth API generates token + payload.
+2. Token stored in DB.
+3. Other APIs send token to `/check-token`.
+4. Auth API validates + renews timestamp.
+5. If expired → 401.
+6. Logout or user delete → remove token.
+
+---
+
+**Done criteria:**
+- Token-based auth fully functional.
+- Centralized cache in DB.
+- Renewal atomic, short TTL.
+- No token leaks via URL.
+- Minimal overhead, max security.
+
+---
+
+MIT © Eqeqo
+
+## Rol
+Central identity and authorization API for the Eqeqo ecosystem.
+Manages users, services, roles, and permissions.
+Issues and validates access tokens for all other APIs.
+
+---
+
+## Project Structure
+```
+src/
+├── main.rs           # Entry point
+├── lib.rs            # Router setup
+├── handlers/         # Domain-specific endpoints
+│   ├── users.rs
+│   ├── roles.rs
+│   ├── permissions.rs
+│   ├── services.rs
+│   └── relations.rs
+├── db.rs             # Database pool (SQLx)
+├── auth.rs           # Token logic (JWT/HMAC)
+├── models/           # Structs and DTOs
+└── utils.rs          # Common helpers
+db/
+└── run_all.sql       # DB bootstrap and schema
+```
+
+---
+
+## Development & Workflow
+
+**Local setup**
+```bash
+psql -U postgres -f db/run_all.sql
+cp .env.example .env
+cargo run
+```
+
+**Tests**
+```bash
+cargo test
+```
+
+---
+
+## Coding & Commit Rules
+- Use **two-space indentation**, no tabs.
+- Keep route handlers small and grouped by resource.
+- Use `serde::Serialize` for DTOs.
+- Use imperative commit prefixes: `feat:`, `fix:`, `refactor:`, `docs:`.
+- Include SQL or curl samples in PRs that change endpoints.
+
+---
+
+## Environment Variables
+- `DATABASE_URL` → PostgreSQL connection string
+- `SERVER_PORT` → Port where service runs
+- `JWT_SECRET` → Token signing secret
+- `TOKEN_EXPIRY` → Default token lifetime
+
+---
+
+## Security Checklist
+- Never commit `.env` or credentials.
+- Validate tokens in all routes except `/auth/login`.
+- Verify expired or revoked tokens are blocked.
+- Restrict DB roles to least privilege.
+- Expose only the JWT public key for other services.
+
+---
+
+## Integration Notes
+- Every Eqeqo API must check user access through `/check-permission`.
+- Bridges or frontends may verify JWT locally when possible.
+- `Auth-API` logs all login and role assignment actions.
+
+---
 
 ## Testing Guidelines
-Integration tests live in `tests/api_tests.rs` and expect a fresh `auth_api` database seeded with `db/run_all.sql`. Name new tests `<feature>_behaves_as_expected` to match existing patterns. Always run `cargo test` before pushing to ensure unit and integration suites pass with SQLx checks regenerated when queries change.
+- Integration tests in `tests/api_tests.rs`.
+- Tests require a seeded `auth_api` DB from `db/run_all.sql`.
+- Use names like `login_behaves_as_expected` for consistency.
 
-## Commit & Pull Request Guidelines
-Commit subjects should be imperative, present tense, and under 72 characters; prefix with clarifiers like `feat:` or `fix:` when useful. PRs should summarize behavioral changes, call out required DB scripts, link relevant issues, and provide example curl or SQL snippets when the API surface shifts.
+---
 
-## Security & Configuration Tips
-Never commit `.env` files or credentials—use `dotenvy` locally instead. Document required environment variables in PRs and limit connection pool size with `MAX_CONNECTIONS` when debugging to avoid exhausting Postgres. Confirm new endpoints reject unauthorized access before merge.
+## Future Improvements
+- Add refresh tokens.
+- Add audit logs for permission changes.
+- Implement service-to-service authentication (internal API keys).

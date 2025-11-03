@@ -1,92 +1,114 @@
-# auth-api
+# EQEQO Auth API
 
-Minimal standalone authentication and authorization API for centralized user management.
+Centralized authentication and authorization service for the **Eqeqo** ecosystem.
+Handles token issuance, validation, and access control for all other APIs.
 
-## Usage
+---
 
-**Prerequisites:**
-
-* Rust
-* PostgreSQL
-
-### 1. Clone the repository
+## ⚙️ Setup
 
 ```bash
-git clone <repository_url>
-cd auth-api
+psql -U postgres -f db/run_all.sql
+cargo run
+```
+
+Server default: `http://127.0.0.1:7878`
+
+Environment:
+```
+DATABASE_URL=postgres://USER:PASSWORD@HOST/auth_api
+SERVER_PORT=7878
+TOKEN_TTL_SECONDS=300
+TOKEN_RENEW_THRESHOLD_SECONDS=30
 ```
 
 ---
 
-### 2. Set up the database
+## 🧩 Endpoints
 
-*   Run the `run_all.sql` script located in the `/db` directory. This script will automatically create the database (named `auth_api`) and set up all the necessary tables and procedures.
+| Method | Path | Description |
+| ------ | ---- | ----------- |
+| **POST** | `/auth/login` | Generate a new token for valid user |
+| **POST** | `/auth/logout` | Revoke token (delete from cache) |
+| **GET** | `/auth/profile` | Validate token and return user payload (renews if valid) |
+| **POST** | `/check-token` | Validate token from another API (atomic renewal logic) |
+| **GET** | `/users` | List users |
+| **POST** | `/users` | Create new user |
+| **PUT** | `/users/{id}` | Update user |
+| **DELETE** | `/users/{id}` | Disable or delete user |
+| **GET** | `/roles` | List roles |
+| **POST** | `/roles` | Create role |
+| **GET** | `/permissions` | List permissions |
+| **POST** | `/permissions` | Create permission |
+| **POST** | `/role-permissions` | Assign permission to role |
+| **POST** | `/service-roles` | Assign role to service |
+| **POST** | `/person-service-roles` | Assign role to person in a service |
 
-Example (from your terminal, you might need to connect as a superuser like `postgres` initially):
+---
 
-```bash
-psql -U <user> -f db/run_all.sql
+## 🗃️ Database (add directly to current schema)
+
+```sql
+CREATE TABLE auth.tokens_cache (
+  token TEXT PRIMARY KEY,
+  payload JSONB NOT NULL,
+  modified_at NUMERIC NOT NULL
+);
+CREATE INDEX idx_auth_tokens_modified_at ON auth.tokens_cache(modified_at);
 ```
 
-### 3. Configure the environment
+---
 
-Create a `.env` file in the root directory and add your PostgreSQL connection string. Make sure the database name is `auth_api` as created by the script.
+## 🔁 Token logic
+- Generated at login (`hash(secret + random + timestamp)`).
+- Stored in `auth.tokens_cache` with `payload` and `modified_at`.
+- Renewed automatically if not expired (`TTL=5min`, threshold=30s).
+- Removed on logout or user deletion.
 
-```env
-DATABASE_URL=postgres://USER:PASSWORD@HOST/auth_api
-```
+---
 
-### 4. Run the API server
-
-```bash
-cargo run
-```
-
-If successful, the server will start on:
+## 🔐 Token header
+All requests must include:
 
 ```
-http://127.0.0.1:7878
+token: <token>
 ```
 
-## License
+No tokens in URLs.
 
-Copyright (c) 2025
-[fahedsl](https://gitlab.com/fahedsl)
+---
 
-This project is licensed under the [MIT License](https://opensource.org/licenses/MIT).
+## 🧭 Use case diagram (visible on GitHub)
 
-## Endpoints
+```mermaid
+sequenceDiagram
+  participant F as Frontend
+  participant A as Auth API
+  participant S as Stock API
+  participant DB as Auth DB
 
-| Method | Path                                      | Description                                |
-|--------|-------------------------------------------|--------------------------------------------|
-| GET    | /                                         | Home                                       |
-| GET    | /users                                    | List all users                             |
-| POST   | /users                                    | Create a new user                          |
-| GET    | /users/{id}                               | Get a user by ID                           |
-| PUT    | /users/{id}                               | Update a user by ID                        |
-| DELETE | /users/{id}                               | Delete a user by ID                        |
-| GET    | /services                                 | List all services                          |
-| POST   | /services                                 | Create a new service                       |
-| PUT    | /services/{id}                            | Update a service by ID                     |
-| DELETE | /services/{id}                            | Delete a service by ID                     |
-| GET    | /roles                                    | List all roles                             |
-| POST   | /roles                                    | Create a new role                          |
-| GET    | /roles/{id}                               | Get a role by ID                           |
-| PUT    | /roles/{id}                               | Update a role by ID                        |
-| DELETE | /roles/{id}                               | Delete a role by ID                        |
-| GET    | /permissions                              | List all permissions                       |
-| POST   | /permissions                              | Create a new permission                    |
-| PUT    | /permissions/{id}                         | Update a permission by ID                  |
-| DELETE | /permissions/{id}                         | Delete a permission by ID                  |
-| POST   | /role-permissions                         | Assign a permission to a role              |
-| DELETE | /role-permissions                         | Remove a permission from a role            |
-| GET    | /roles/{id}/permissions                   | List all permissions for a role            |
-| POST   | /service-roles                            | Assign a role to a service                 |
-| DELETE | /service-roles                            | Remove a role from a service               |
-| GET    | /services/{id}/roles                      | List all roles for a service               |
-| POST   | /person-service-roles                     | Assign a role to a person in a service     |
-| DELETE | /person-service-roles                     | Remove a role from a person in a service   |
-| GET    | /people/{person_id}/services/{service_id}/roles | List all roles for a person in a service   |
-| GET    | /services/{service_id}/roles/{role_id}/people | List all people with a role in a service |
-| GET    | /check-permission                         | Check if a person has a permission         |
-| GET    | /people/{person_id}/services              | List all services for a person             |
+  F->>A: POST /auth/login (user, pass)
+  A->>DB: Validate user / generate token
+  DB-->>A: token, payload
+  A-->>F: {token, expires_at}
+
+  F->>S: GET /stock/items\nHeader: token
+  S->>A: POST /check-token (token)
+  A->>DB: SELECT + conditional UPDATE modified_at
+  DB-->>A: payload or 401
+  A-->>S: valid payload
+  S-->>F: authorized data
+```
+
+---
+
+## 🧱 Security & cache
+- Tokens stored centrally in DB (no Redis needed).
+- Short TTL (2–5 min).
+- Conditional atomic renewal to prevent DB contention.
+- Revocation: delete from table.
+- Logs: minimal (token, endpoint, ts, ip).
+
+---
+
+MIT © Eqeqo
