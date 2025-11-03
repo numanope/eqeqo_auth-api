@@ -78,6 +78,14 @@ CREATE TABLE auth.person_service_role (
   UNIQUE (person_id, service_id, role_id)
 );
 
+CREATE TABLE auth.tokens_cache (
+  token TEXT PRIMARY KEY,
+  payload JSONB NOT NULL,
+  modified_at BIGINT NOT NULL
+);
+
+CREATE INDEX idx_auth_tokens_modified_at ON auth.tokens_cache(modified_at);
+
 CREATE OR REPLACE FUNCTION auth.set_epoch_audit_fields()
 RETURNS TRIGGER AS $$
 DECLARE
