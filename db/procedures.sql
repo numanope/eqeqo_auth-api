@@ -67,10 +67,14 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION auth.create_role(p_name TEXT)
 RETURNS TABLE(id INT, name TEXT) AS $$
 BEGIN
-    RETURN QUERY
     INSERT INTO auth.role (name)
     VALUES (p_name)
-    RETURNING auth.role.id, auth.role.name;
+    ON CONFLICT (name) DO NOTHING;
+
+    RETURN QUERY
+    SELECT r.id, r.name
+    FROM auth.role r
+    WHERE r.name = p_name;
 END;
 $$ LANGUAGE plpgsql;
 
@@ -111,10 +115,14 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION auth.create_permission(p_name TEXT)
 RETURNS TABLE(id INT, name TEXT) AS $$
 BEGIN
-    RETURN QUERY
     INSERT INTO auth.permission (name)
     VALUES (p_name)
-    RETURNING auth.permission.id, auth.permission.name;
+    ON CONFLICT (name) DO NOTHING;
+
+    RETURN QUERY
+    SELECT p.id, p.name
+    FROM auth.permission p
+    WHERE p.name = p_name;
 END;
 $$ LANGUAGE plpgsql;
 
@@ -146,9 +154,21 @@ CREATE OR REPLACE FUNCTION auth.create_service(p_name TEXT, p_description TEXT)
 RETURNS TABLE(id INT, name TEXT, description TEXT) AS $$
 BEGIN
     RETURN QUERY
-    INSERT INTO auth.services (name, description)
-    VALUES (p_name, p_description)
-    RETURNING auth.services.id, auth.services.name, auth.services.description;
+    WITH upsert AS (
+        INSERT INTO auth.services (name, description)
+        VALUES (p_name, p_description)
+        ON CONFLICT (name) DO UPDATE
+        SET
+            description = EXCLUDED.description,
+            updated_at = EXTRACT(EPOCH FROM NOW())::BIGINT
+        RETURNING id, name, description
+    )
+    SELECT id, name, description FROM upsert
+    UNION ALL
+    SELECT s.id, s.name, s.description
+    FROM auth.services s
+    WHERE s.name = p_name
+      AND NOT EXISTS (SELECT 1 FROM upsert);
 END;
 $$ LANGUAGE plpgsql;
 

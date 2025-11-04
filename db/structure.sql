@@ -10,8 +10,8 @@ CREATE TYPE auth.person_type AS ENUM ('N', 'J');
 -- Tables
 CREATE TABLE auth.person (
   id SERIAL PRIMARY KEY,
-  username TEXT NOT NULL UNIQUE, -- Added for authentication
-  password_hash TEXT NOT NULL, -- Added for authentication
+  username TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
   name TEXT NOT NULL,
   person_type auth.person_type NOT NULL DEFAULT 'N',
   document_type auth.document_type NOT NULL DEFAULT 'DNI',
