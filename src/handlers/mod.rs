@@ -2,7 +2,7 @@ use crate::auth::{TokenError, TokenManager, TokenValidation};
 use crate::database::DB;
 use httpageboy::{Request, Response, StatusCode};
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::json;
 use std::future::Future;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -655,7 +655,10 @@ pub async fn update_role(req: &Request) -> Response {
       content_type: "application/json".to_string(),
       content: json!({ "status": "success" }).to_string().into_bytes(),
     },
-    Err(_) => error_response(StatusCode::InternalServerError, "Failed to update role"),
+    Err(err) => {
+      eprintln!("[handler-error] update_role: {}", err);
+      error_response(StatusCode::InternalServerError, "Failed to update role")
+    }
   }
 }
 
@@ -770,10 +773,13 @@ pub async fn update_permission(req: &Request) -> Response {
       content_type: "application/json".to_string(),
       content: json!({ "status": "success" }).to_string().into_bytes(),
     },
-    Err(_) => error_response(
-      StatusCode::InternalServerError,
-      "Failed to update permission",
-    ),
+    Err(err) => {
+      eprintln!("[handler-error] update_permission: {}", err);
+      error_response(
+        StatusCode::InternalServerError,
+        "Failed to update permission",
+      )
+    }
   }
 }
 

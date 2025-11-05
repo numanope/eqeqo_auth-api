@@ -3,7 +3,7 @@ use httpageboy::Server;
 use httpageboy::test_utils::{SERVER_URL, run_test, setup_test_server};
 use serde_json::{Value, json};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::time::sleep;
 
 async fn create_test_server() -> Server {
@@ -40,7 +40,11 @@ fn next_id() -> u64 {
 }
 
 fn unique_value(prefix: &str) -> String {
-  format!("{}_{}", prefix, next_id())
+  let now = SystemTime::now()
+    .duration_since(UNIX_EPOCH)
+    .unwrap_or_default()
+    .as_millis();
+  format!("{}_{}_{}", prefix, now, next_id())
 }
 
 fn unique_number() -> String {
@@ -134,13 +138,11 @@ async fn login_and_get_token() -> String {
 }
 
 #[tokio::test]
-#[ignore = "temporarily disabled"]
 async fn home_endpoint_returns_html() {
   execute(b"GET / HTTP/1.1\r\n\r\n", b"Welcome to the Auth API").await;
 }
 
 #[tokio::test]
-#[ignore = "temporarily disabled"]
 async fn login_succeeds_with_valid_credentials() {
   let response = execute(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"adm1-hash\"}",
@@ -153,7 +155,6 @@ async fn login_succeeds_with_valid_credentials() {
 }
 
 #[tokio::test]
-#[ignore = "temporarily disabled"]
 async fn login_fails_with_wrong_password() {
   execute(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"username\":\"adm1\",\"password\":\"wrong\"}",
@@ -163,7 +164,6 @@ async fn login_fails_with_wrong_password() {
 }
 
 #[tokio::test]
-#[ignore = "temporarily disabled"]
 async fn login_fails_with_invalid_body() {
   execute(
     b"POST /auth/login HTTP/1.1\r\nContent-Type: application/json\r\n\r\ntest",
@@ -173,13 +173,11 @@ async fn login_fails_with_invalid_body() {
 }
 
 #[tokio::test]
-#[ignore = "temporarily disabled"]
 async fn list_users_requires_token() {
   execute(b"GET /users HTTP/1.1\r\n\r\n", b"Missing token header").await;
 }
 
 #[tokio::test]
-#[ignore = "temporarily disabled"]
 async fn profile_requires_token_header() {
   execute(
     b"GET /auth/profile HTTP/1.1\r\n\r\n",
@@ -189,7 +187,6 @@ async fn profile_requires_token_header() {
 }
 
 #[tokio::test]
-#[ignore = "temporarily disabled"]
 async fn profile_returns_payload_when_token_valid() {
   let token = login_and_get_token().await;
   let request = format!("GET /auth/profile HTTP/1.1\r\ntoken: {}\r\n\r\n", token);
@@ -200,7 +197,6 @@ async fn profile_returns_payload_when_token_valid() {
 }
 
 #[tokio::test]
-#[ignore = "temporarily disabled"]
 async fn profile_rejects_invalid_token() {
   execute(
     b"GET /auth/profile HTTP/1.1\r\ntoken: invalid\r\n\r\n",
@@ -210,7 +206,6 @@ async fn profile_rejects_invalid_token() {
 }
 
 #[tokio::test]
-#[ignore = "temporarily disabled"]
 async fn check_token_confirms_valid_token() {
   let token = login_and_get_token().await;
   let request = format!("POST /check-token HTTP/1.1\r\ntoken: {}\r\n\r\n", token);
@@ -220,7 +215,6 @@ async fn check_token_confirms_valid_token() {
 }
 
 #[tokio::test]
-#[ignore = "temporarily disabled"]
 async fn check_token_requires_header() {
   execute(
     b"POST /check-token HTTP/1.1\r\n\r\n",
@@ -230,7 +224,6 @@ async fn check_token_requires_header() {
 }
 
 #[tokio::test]
-#[ignore = "temporarily disabled"]
 async fn check_token_rejects_invalid_token() {
   execute(
     b"POST /check-token HTTP/1.1\r\ntoken: invalid\r\n\r\n",
@@ -240,7 +233,6 @@ async fn check_token_rejects_invalid_token() {
 }
 
 #[tokio::test]
-#[ignore = "temporarily disabled"]
 async fn logout_requires_token_header() {
   execute(
     b"POST /auth/logout HTTP/1.1\r\n\r\n",
@@ -250,7 +242,6 @@ async fn logout_requires_token_header() {
 }
 
 #[tokio::test]
-#[ignore = "temporarily disabled"]
 async fn logout_revokes_token() {
   let token = login_and_get_token().await;
   let request = format!("POST /auth/logout HTTP/1.1\r\ntoken: {}\r\n\r\n", &token);
@@ -261,7 +252,6 @@ async fn logout_revokes_token() {
 }
 
 #[tokio::test]
-#[ignore = "temporarily disabled"]
 async fn logout_rejects_unknown_token() {
   execute(
     b"POST /auth/logout HTTP/1.1\r\ntoken: invalid\r\n\r\n",
@@ -271,7 +261,6 @@ async fn logout_rejects_unknown_token() {
 }
 
 #[tokio::test]
-#[ignore = "temporarily disabled"]
 async fn list_users_returns_seeded_admin() {
   let token = login_and_get_token().await;
   let request = request_with_token("GET", "/users", &token, None);
@@ -287,7 +276,6 @@ async fn list_users_returns_seeded_admin() {
 }
 
 #[tokio::test]
-#[ignore = "temporarily disabled"]
 async fn create_user_succeeds_with_unique_payload() {
   let token = login_and_get_token().await;
   let (id, username) = create_user_for_tests(&token).await;
@@ -296,7 +284,6 @@ async fn create_user_succeeds_with_unique_payload() {
 }
 
 #[tokio::test]
-#[ignore = "temporarily disabled"]
 async fn create_user_fails_with_duplicate_username() {
   let token = login_and_get_token().await;
   let body = json!({
@@ -313,7 +300,6 @@ async fn create_user_fails_with_duplicate_username() {
 }
 
 #[tokio::test]
-#[ignore = "temporarily disabled"]
 async fn create_user_fails_with_invalid_body() {
   let token = login_and_get_token().await;
   let request = request_with_token("POST", "/users", &token, Some("{\"username\":\"only\"}"));
@@ -321,7 +307,6 @@ async fn create_user_fails_with_invalid_body() {
 }
 
 #[tokio::test]
-#[ignore = "temporarily disabled"]
 async fn get_user_returns_existing_user() {
   let token = login_and_get_token().await;
   let list_request = request_with_token("GET", "/users", &token, None);
@@ -344,7 +329,6 @@ async fn get_user_returns_existing_user() {
 }
 
 #[tokio::test]
-#[ignore = "temporarily disabled"]
 async fn get_user_fails_with_invalid_id() {
   let token = login_and_get_token().await;
   let request = request_with_token("GET", "/users/abc", &token, None);
@@ -352,7 +336,6 @@ async fn get_user_fails_with_invalid_id() {
 }
 
 #[tokio::test]
-#[ignore = "temporarily disabled"]
 async fn get_user_returns_not_found() {
   let token = login_and_get_token().await;
   let request = request_with_token("GET", "/users/999999", &token, None);
@@ -360,7 +343,6 @@ async fn get_user_returns_not_found() {
 }
 
 #[tokio::test]
-#[ignore = "temporarily disabled"]
 async fn update_user_succeeds_for_existing_user() {
   let token = login_and_get_token().await;
   let (user_id, _) = create_user_for_tests(&token).await;
@@ -378,7 +360,6 @@ async fn update_user_succeeds_for_existing_user() {
 }
 
 #[tokio::test]
-#[ignore = "temporarily disabled"]
 async fn update_user_fails_with_invalid_body() {
   let token = login_and_get_token().await;
   let request = request_with_token("PUT", "/users/1", &token, Some("{\"name\":}"));
@@ -386,13 +367,11 @@ async fn update_user_fails_with_invalid_body() {
 }
 
 #[tokio::test]
-#[ignore = "temporarily disabled"]
 async fn update_user_requires_token() {
   execute(b"PUT /users/1 HTTP/1.1\r\n\r\n", b"Missing token header").await;
 }
 
 #[tokio::test]
-#[ignore = "temporarily disabled"]
 async fn delete_user_succeeds() {
   let token = login_and_get_token().await;
   let (user_id, _) = create_user_for_tests(&token).await;
@@ -411,7 +390,6 @@ async fn delete_user_succeeds() {
 }
 
 #[tokio::test]
-#[ignore = "temporarily disabled"]
 async fn delete_user_fails_with_invalid_id() {
   let token = login_and_get_token().await;
   let request = request_with_token("DELETE", "/users/abc", &token, None);
@@ -419,13 +397,11 @@ async fn delete_user_fails_with_invalid_id() {
 }
 
 #[tokio::test]
-#[ignore = "temporarily disabled"]
 async fn delete_user_requires_token() {
   execute(b"DELETE /users/1 HTTP/1.1\r\n\r\n", b"Missing token header").await;
 }
 
 #[tokio::test]
-#[ignore = "temporarily disabled"]
 async fn list_services_returns_data() {
   let token = login_and_get_token().await;
   let request = request_with_token("GET", "/services", &token, None);
@@ -444,7 +420,6 @@ async fn create_service_succeeds_with_unique_payload() {
 }
 
 #[tokio::test]
-#[ignore = "temporarily disabled"]
 async fn create_service_fails_with_invalid_body() {
   let token = login_and_get_token().await;
   let request = request_with_token("POST", "/services", &token, Some("{\"name\":10}"));
@@ -464,7 +439,6 @@ async fn update_service_succeeds() {
 }
 
 #[tokio::test]
-#[ignore = "temporarily disabled"]
 async fn update_service_fails_with_invalid_id() {
   let token = login_and_get_token().await;
   let request = request_with_token("PUT", "/services/abc", &token, Some("{\"name\":\"X\"}"));
@@ -487,7 +461,6 @@ async fn delete_service_succeeds() {
 }
 
 #[tokio::test]
-#[ignore = "temporarily disabled"]
 async fn delete_service_fails_with_invalid_id() {
   let token = login_and_get_token().await;
   let request = request_with_token("DELETE", "/services/abc", &token, None);
@@ -495,7 +468,6 @@ async fn delete_service_fails_with_invalid_id() {
 }
 
 #[tokio::test]
-#[ignore = "temporarily disabled"]
 async fn delete_service_requires_token() {
   execute(
     b"DELETE /services/1 HTTP/1.1\r\n\r\n",
@@ -505,7 +477,6 @@ async fn delete_service_requires_token() {
 }
 
 #[tokio::test]
-#[ignore = "temporarily disabled"]
 async fn list_roles_returns_data() {
   let token = login_and_get_token().await;
   let request = request_with_token("GET", "/roles", &token, None);
@@ -529,7 +500,6 @@ async fn create_role_succeeds_with_unique_name() {
 }
 
 #[tokio::test]
-#[ignore = "temporarily disabled"]
 async fn create_role_fails_with_invalid_body() {
   let token = login_and_get_token().await;
   let request = request_with_token("POST", "/roles", &token, Some("{\"title\":\"invalid\"}"));
@@ -548,7 +518,6 @@ async fn get_role_returns_created_role() {
 }
 
 #[tokio::test]
-#[ignore = "temporarily disabled"]
 async fn get_role_fails_with_invalid_id() {
   let token = login_and_get_token().await;
   let request = request_with_token("GET", "/roles/abc", &token, None);
@@ -569,7 +538,6 @@ async fn update_role_succeeds() {
 }
 
 #[tokio::test]
-#[ignore = "temporarily disabled"]
 async fn update_role_fails_with_invalid_body() {
   let token = login_and_get_token().await;
   let request = request_with_token("PUT", "/roles/1", &token, Some("{\"name\":}"));
@@ -592,7 +560,6 @@ async fn delete_role_succeeds() {
 }
 
 #[tokio::test]
-#[ignore = "temporarily disabled"]
 async fn delete_role_fails_with_invalid_id() {
   let token = login_and_get_token().await;
   let request = request_with_token("DELETE", "/roles/abc", &token, None);
@@ -600,13 +567,11 @@ async fn delete_role_fails_with_invalid_id() {
 }
 
 #[tokio::test]
-#[ignore = "temporarily disabled"]
 async fn delete_role_requires_token() {
   execute(b"DELETE /roles/1 HTTP/1.1\r\n\r\n", b"Missing token header").await;
 }
 
 #[tokio::test]
-#[ignore = "temporarily disabled"]
 async fn list_permissions_returns_data() {
   let token = login_and_get_token().await;
   let request = request_with_token("GET", "/permissions", &token, None);
@@ -630,7 +595,6 @@ async fn create_permission_succeeds_with_unique_name() {
 }
 
 #[tokio::test]
-#[ignore = "temporarily disabled"]
 async fn create_permission_fails_with_invalid_body() {
   let token = login_and_get_token().await;
   let request = request_with_token(
@@ -656,7 +620,6 @@ async fn update_permission_succeeds() {
 }
 
 #[tokio::test]
-#[ignore = "temporarily disabled"]
 async fn update_permission_fails_with_invalid_body() {
   let token = login_and_get_token().await;
   let request = request_with_token("PUT", "/permissions/1", &token, Some("{\"name\":}"));
@@ -679,7 +642,6 @@ async fn delete_permission_succeeds() {
 }
 
 #[tokio::test]
-#[ignore = "temporarily disabled"]
 async fn delete_permission_fails_with_invalid_id() {
   let token = login_and_get_token().await;
   let request = request_with_token("DELETE", "/permissions/abc", &token, None);
@@ -687,7 +649,6 @@ async fn delete_permission_fails_with_invalid_id() {
 }
 
 #[tokio::test]
-#[ignore = "temporarily disabled"]
 async fn delete_permission_requires_token() {
   execute(
     b"DELETE /permissions/1 HTTP/1.1\r\n\r\n",
@@ -713,7 +674,6 @@ async fn assign_permission_to_role_succeeds() {
 }
 
 #[tokio::test]
-#[ignore = "temporarily disabled"]
 async fn assign_permission_to_role_fails_with_invalid_body() {
   let token = login_and_get_token().await;
   let request = request_with_token(
@@ -749,7 +709,6 @@ async fn remove_permission_from_role_succeeds() {
 }
 
 #[tokio::test]
-#[ignore = "temporarily disabled"]
 async fn remove_permission_from_role_requires_token() {
   execute(
     b"DELETE /role-permissions HTTP/1.1\r\n\r\n",
@@ -775,7 +734,6 @@ async fn assign_role_to_service_succeeds() {
 }
 
 #[tokio::test]
-#[ignore = "temporarily disabled"]
 async fn assign_role_to_service_fails_with_invalid_body() {
   let token = login_and_get_token().await;
   let request = request_with_token(
@@ -811,7 +769,6 @@ async fn remove_role_from_service_succeeds() {
 }
 
 #[tokio::test]
-#[ignore = "temporarily disabled"]
 async fn remove_role_from_service_requires_token() {
   execute(
     b"DELETE /service-roles HTTP/1.1\r\n\r\n",
@@ -848,7 +805,6 @@ async fn list_role_permissions_returns_entries() {
 }
 
 #[tokio::test]
-#[ignore = "temporarily disabled"]
 async fn list_role_permissions_fails_with_invalid_id() {
   let token = login_and_get_token().await;
   let request = request_with_token("GET", "/roles/abc/permissions", &token, None);
@@ -882,7 +838,6 @@ async fn list_service_roles_returns_entries() {
 }
 
 #[tokio::test]
-#[ignore = "temporarily disabled"]
 async fn list_service_roles_fails_with_invalid_id() {
   let token = login_and_get_token().await;
   let request = request_with_token("GET", "/services/abc/roles", &token, None);
