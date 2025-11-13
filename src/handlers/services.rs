@@ -1,0 +1,146 @@
+use httpageboy::{Request, Response, StatusCode};
+use serde::{Deserialize, Serialize};
+use serde_json::json;
+
+use super::{error_response, require_token_without_renew};
+
+#[derive(Serialize, sqlx::FromRow)]
+pub struct Service {
+  id: i32,
+  name: String,
+  description: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct CreateServicePayload {
+  name: String,
+  description: Option<String>,
+}
+
+pub async fn create_service(req: &Request) -> Response {
+  let (db, _, _) = match require_token_without_renew(req).await {
+    Ok(tuple) => tuple,
+    Err(response) => return response,
+  };
+  let payload: CreateServicePayload = match serde_json::from_slice(req.body.as_bytes()) {
+    Ok(p) => p,
+    Err(_) => return error_response(StatusCode::BadRequest, "Invalid request body"),
+  };
+  match sqlx::query_as::<_, Service>("SELECT * FROM auth.create_service($1, $2)")
+    .bind(payload.name)
+    .bind(payload.description)
+    .fetch_one(db.pool())
+    .await
+  {
+    Ok(service) => Response {
+      status: StatusCode::Created.to_string(),
+      content_type: "application/json".to_string(),
+      content: serde_json::to_vec(&service).unwrap(),
+    },
+    Err(_) => error_response(StatusCode::InternalServerError, "Failed to create service"),
+  }
+}
+
+pub async fn list_services(req: &Request) -> Response {
+  let (db, _, _) = match require_token_without_renew(req).await {
+    Ok(tuple) => tuple,
+    Err(response) => return response,
+  };
+  match sqlx::query_as::<_, Service>("SELECT * FROM auth.list_services()")
+    .fetch_all(db.pool())
+    .await
+  {
+    Ok(services) => Response {
+      status: StatusCode::Ok.to_string(),
+      content_type: "application/json".to_string(),
+      content: serde_json::to_vec(&services).unwrap(),
+    },
+    Err(_) => error_response(StatusCode::InternalServerError, "Failed to fetch services"),
+  }
+}
+
+#[derive(Deserialize)]
+pub struct UpdateServicePayload {
+  name: Option<String>,
+  description: Option<String>,
+}
+
+pub async fn update_service(req: &Request) -> Response {
+  let (db, _, _) = match require_token_without_renew(req).await {
+    Ok(tuple) => tuple,
+    Err(response) => return response,
+  };
+  let id: i32 = match req.params.get("id").and_then(|s| s.parse().ok()) {
+    Some(id) => id,
+    None => return error_response(StatusCode::BadRequest, "Invalid service ID"),
+  };
+  let payload: UpdateServicePayload = match serde_json::from_slice(req.body.as_bytes()) {
+    Ok(p) => p,
+    Err(_) => return error_response(StatusCode::BadRequest, "Invalid request body"),
+  };
+  match sqlx::query("CALL auth.update_service($1, $2, $3)")
+    .bind(id)
+    .bind(payload.name)
+    .bind(payload.description)
+    .execute(db.pool())
+    .await
+  {
+    Ok(_) => Response {
+      status: StatusCode::Ok.to_string(),
+      content_type: "application/json".to_string(),
+      content: json!({ "status": "success" }).to_string().into_bytes(),
+    },
+    Err(_) => error_response(StatusCode::InternalServerError, "Failed to update service"),
+  }
+}
+
+pub async fn delete_service(req: &Request) -> Response {
+  let (db, _, _) = match require_token_without_renew(req).await {
+    Ok(tuple) => tuple,
+    Err(response) => return response,
+  };
+  let id: i32 = match req.params.get("id").and_then(|s| s.parse().ok()) {
+    Some(id) => id,
+    None => return error_response(StatusCode::BadRequest, "Invalid service ID"),
+  };
+  match sqlx::query("CALL auth.delete_service($1)")
+    .bind(id)
+    .execute(db.pool())
+    .await
+  {
+    Ok(_) => Response {
+      status: StatusCode::NoContent.to_string(),
+      content_type: "application/json".to_string(),
+      content: Vec::new(),
+    },
+    Err(_) => error_response(StatusCode::InternalServerError, "Failed to delete service"),
+  }
+}
+
+pub async fn list_services_of_person(req: &Request) -> Response {
+  let (db, _, _) = match require_token_without_renew(req).await {
+    Ok(tuple) => tuple,
+    Err(response) => return response,
+  };
+  let person_id: i32 = match req.params.get("person_id").and_then(|s| s.parse().ok()) {
+    Some(id) => id,
+    None => return error_response(StatusCode::BadRequest, "Invalid person ID"),
+  };
+  match sqlx::query_as::<_, Service>(
+    "SELECT id, name, NULL as description FROM auth.list_services_of_person($1)",
+  )
+  .bind(person_id)
+  .fetch_all(db.pool())
+  .await
+  {
+    Ok(services) => Response {
+      status: StatusCode::Ok.to_string(),
+      content_type: "application/json".to_string(),
+      content: serde_json::to_vec(&services).unwrap(),
+    },
+    Err(_) => error_response(
+      StatusCode::InternalServerError,
+      "Failed to fetch services of person",
+    ),
+  }
+}
