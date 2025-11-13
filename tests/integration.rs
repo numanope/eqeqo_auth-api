@@ -2564,12 +2564,17 @@ async fn test_check_permission_success() {
   );
   run_test(assign_person_request.as_bytes(), b"\"status\":\"success\"");
 
-  let check_request = format!(
-    "GET /check-permission HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\n\r\n{{\"person_id\":{person},\"service_id\":{service},\"permission_name\":\"{perm}\"}}",
-    token,
+  let check_body = format!(
+    "{{\"person_id\":{person},\"service_id\":{service},\"permission_name\":\"{perm}\"}}",
     person = user_id,
     service = service_id,
     perm = permission_name
+  );
+  let check_request = format!(
+    "GET /check-permission HTTP/1.1\r\ntoken: {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+    token,
+    check_body.len(),
+    check_body
   );
   run_test(check_request.as_bytes(), b"\"has_permission\":true");
 }

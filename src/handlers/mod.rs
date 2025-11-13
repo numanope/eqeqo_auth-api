@@ -1116,21 +1116,51 @@ pub struct CheckPermissionPayload {
   permission_name: String,
 }
 
+fn parse_check_permission_payload(req: &Request) -> Result<CheckPermissionPayload, Response> {
+  if !req.body.trim().is_empty() {
+    match serde_json::from_slice::<CheckPermissionPayload>(req.body.as_bytes()) {
+      Ok(payload) => return Ok(payload),
+      Err(err) => {
+        eprintln!(
+          "[parse-error] check_permission body='{}' err={}",
+          req.body.replace('\n', "\\n"),
+          err
+        );
+      }
+    }
+  }
+
+  let person_id = req
+    .params
+    .get("person_id")
+    .and_then(|value| value.parse::<i32>().ok());
+  let service_id = req
+    .params
+    .get("service_id")
+    .and_then(|value| value.parse::<i32>().ok());
+  let permission_name = req.params.get("permission_name").cloned();
+
+  match (person_id, service_id, permission_name) {
+    (Some(person_id), Some(service_id), Some(permission_name)) => Ok(CheckPermissionPayload {
+      person_id,
+      service_id,
+      permission_name,
+    }),
+    _ => Err(error_response(
+      StatusCode::BadRequest,
+      "Invalid request body",
+    )),
+  }
+}
+
 pub async fn check_person_permission_in_service(req: &Request) -> Response {
   let (db, _, _) = match require_token_without_renew(req).await {
     Ok(tuple) => tuple,
     Err(response) => return response,
   };
-  let payload: CheckPermissionPayload = match serde_json::from_slice(req.body.as_bytes()) {
-    Ok(p) => p,
-    Err(err) => {
-      eprintln!(
-        "[parse-error] check_permission body='{}' err={}",
-        req.body.replace('\n', "\\n"),
-        err
-      );
-      return error_response(StatusCode::BadRequest, "Invalid request body");
-    }
+  let payload = match parse_check_permission_payload(req) {
+    Ok(payload) => payload,
+    Err(response) => return response,
   };
   match sqlx::query_scalar::<_, bool>(
     "SELECT * FROM auth.check_person_permission_in_service($1, $2, $3)",
